@@ -90,7 +90,8 @@ class Game(object):
         self.show_energy = True
         self.show_agents = True
 
-        self.energy_map = ScalarMapLayer(self.size)
+        self.energy_map = ScalarViewMapLayer(self.size)
+        self.energy_map.load(self)
         self.energy_map.set_streak(SCATTERED_ENERGY, symmetric)
 
         self.plant_map = ObjectMapLayer(self.size)
@@ -191,7 +192,12 @@ class Game(object):
         # determines its actions based on its view of the world and messages 
         # from its team.
         messages = self.messages
-        actions = [(a, a.act(v, messages[a.team])) for (a, v) in views]
+        #actions = [(a, a.act(v, messages[a.team])) for (a, v) in views]
+        actions = []
+        for (a,v) in views:
+            self.agentX = a.x
+            self.agentY = a.y
+            actions.append((a, a.act(v, messages[a.team])))
         actions_dict = dict(actions)
         random.shuffle(actions)
 
@@ -226,7 +232,7 @@ class Game(object):
                     self.add_agent(a)
             elif action.type == ACT_EAT:
                 #Eat only as much as possible.
-                intake = min(self.energy_map.get(agent.x, agent.y),
+                intake = min(self.energy_map._get(agent.x, agent.y),
                             ENERGY_CAP - agent.energy)
                 agent.energy += intake
                 self.energy_map.change(agent.x, agent.y, -intake)
@@ -393,6 +399,18 @@ class ScalarMapLayer(MapLayer):
 
     def change(self, x, y, val):
         self.values[x, y] += val
+
+class ScalarViewMapLayer(ScalarMapLayer):
+    def _get(self, x, y):
+        return ScalarMapLayer.get(self, x, y)
+    
+    def load(self, game):
+        self.game = game
+    
+    def get(self, x, y):
+        if min(abs(self.game.agentX - x), abs(self.game.agentY - y)) <= 1:
+            return self._get(x, y)
+        return None
 
 
 class ObjectMapLayer(MapLayer):
