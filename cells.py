@@ -85,14 +85,16 @@ class Game(object):
         self.tic = time.time()
         self.terr = ScalarMapLayer(self.size)
         self.terr.set_perlin(10, symmetric)
+        self.terr_view = MapLayerView(self.terr, self)
+        
         self.minds = [m[1].AgentMind for m in mind_list]
 
         self.show_energy = True
         self.show_agents = True
 
-        self.energy_map = ScalarViewMapLayer(self.size)
-        self.energy_map.load(self)
+        self.energy_map = ScalarMapLayer(self.size)
         self.energy_map.set_streak(SCATTERED_ENERGY, symmetric)
+        self.energy_map_view = MapLayerView(self.energy_map, self)
 
         self.plant_map = ObjectMapLayer(self.size)
         self.plant_population = []
@@ -176,8 +178,8 @@ class Game(object):
         views = []
         agent_map_get_small_view_fast = self.agent_map.get_small_view_fast
         plant_map_get_small_view_fast = self.plant_map.get_small_view_fast
-        energy_map = self.energy_map
-        terr_map = self.terr
+        energy_map = self.energy_map_view
+        terr_map = self.terr_view
         WV = WorldView
         views_append = views.append
         for a in self.agent_population:
@@ -192,11 +194,9 @@ class Game(object):
         # determines its actions based on its view of the world and messages 
         # from its team.
         messages = self.messages
-        #actions = [(a, a.act(v, messages[a.team])) for (a, v) in views]
         actions = []
-        for (a,v) in views:
-            self.agentX = a.x
-            self.agentY = a.y
+        for (a, v) in views:
+            (self.agentX, self.agentY) = (a.x, a.y)
             actions.append((a, a.act(v, messages[a.team])))
         actions_dict = dict(actions)
         random.shuffle(actions)
@@ -232,7 +232,7 @@ class Game(object):
                     self.add_agent(a)
             elif action.type == ACT_EAT:
                 #Eat only as much as possible.
-                intake = min(self.energy_map._get(agent.x, agent.y),
+                intake = min(self.energy_map.get(agent.x, agent.y),
                             ENERGY_CAP - agent.energy)
                 agent.energy += intake
                 self.energy_map.change(agent.x, agent.y, -intake)
@@ -400,18 +400,6 @@ class ScalarMapLayer(MapLayer):
     def change(self, x, y, val):
         self.values[x, y] += val
 
-class ScalarViewMapLayer(ScalarMapLayer):
-    def _get(self, x, y):
-        return ScalarMapLayer.get(self, x, y)
-    
-    def load(self, game):
-        self.game = game
-    
-    def get(self, x, y):
-        if min(abs(self.game.agentX - x), abs(self.game.agentY - y)) <= 1:
-            return self._get(x, y)
-        return None
-
 
 class ObjectMapLayer(MapLayer):
     def __init__(self, size):
@@ -545,6 +533,16 @@ class Action(object):
     def get_type(self):
         return self.type
 
+class MapLayerView(object):
+    def __init__(self, maplayer, parent):
+        self.maplayer = maplayer
+        self.parent = parent
+    
+    
+    def get(self, x, y):
+        if max(abs(x - self.parent.agentX), abs(y - self.parent.agentY)) < 2:
+            return self.maplayer.get(x,y)
+        return None
 
 class PlantView(object):
     def __init__(self, p):
